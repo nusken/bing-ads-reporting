@@ -1,6 +1,6 @@
 module BingAdsReporting
   class AuthenticationTokenExpired < Exception; end
-  
+
   class Service
     SUCCESS = 'Success'
 
@@ -8,12 +8,12 @@ module BingAdsReporting
       @settings = settings
       @logger = logger || Logger.new($stdout)
     end
-  
+
     def generate_report(report_settings, report_params)
       options = default_options(report_settings).merge(report_params)
       period = options[:period]
       report_type = options[:report_type]
-    
+
       begin
         response = client.call(:submit_generate_report, message: {
           ns('ReportRequest') => {
@@ -52,7 +52,7 @@ module BingAdsReporting
                                                    }
           }
         })
-        
+
       rescue Savon::SOAPFault => e
         msg = 'unexpected error'
         err = e.to_hash[:fault][:detail][:ad_api_fault_detail][:errors][:ad_api_error][:error_code] rescue nil
@@ -69,33 +69,33 @@ module BingAdsReporting
         @logger.error msg
         raise e
       end
-      
+
       response.body[:submit_generate_report_response][:report_request_id]
     end
-  
+
     def report_ready?(id)
       polled = poll_report(id)
       status = polled.body[:poll_generate_report_response][:report_request_status][:status] rescue nil
       raise "Report status: Error for ID: #{id}. TrackingId: #{polled.header[:tracking_id]}" if status == "Error"
       status == SUCCESS
     end
-    
+
     # returns nil if there is no data
     def report_body(id)
       download(report_url(id))
     end
-  
+
+    def report_url(id)
+      polled = poll_report(id)
+      status = polled.body[:poll_generate_report_response][:report_request_status][:status] rescue nil
+      download_url = polled.body[:poll_generate_report_response][:report_request_status][:report_download_url] rescue nil
+      return nil if download_url.nil? && status == SUCCESS
+      raise "Report URL is not available for report id #{id}" unless download_url
+      download_url
+    end
+
     private
 
-      def report_url(id)
-        polled = poll_report(id)
-        status = polled.body[:poll_generate_report_response][:report_request_status][:status] rescue nil
-        download_url = polled.body[:poll_generate_report_response][:report_request_status][:report_download_url] rescue nil
-        return nil if download_url.nil? && status == SUCCESS
-        raise "Report URL is not available for report id #{id}" unless download_url
-        download_url
-      end
-  
       def default_options(report_settings)
         { format: report_settings[:report_format],
           columns: report_settings[:columns],
@@ -103,7 +103,7 @@ module BingAdsReporting
           report_type: report_settings[:report_type],
           report_name: "MyReport" }
       end
-      
+
       def poll_report(id)
         begin
           client.call(:poll_generate_report, message: {
